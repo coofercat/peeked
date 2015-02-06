@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+    <meta charset="utf-8" />
+    <title>Pico Editor</title>
+    <link rel="stylesheet" href="{{ base_url }}/plugins/peeked/peeked.css" type="text/css" />
+    <meta name="robots" content="noindex, nofollow" />
+</head>
+<body>
+<div id="cover"></div>
+	<div id="popup">
+	  <div class="closegadget"><span data-icon="cross" aria-hiddne="true"></span></div>
+	  <div class="popupcontent">Loading...</div>
+        </div>
+	<div id="saving">Saving...</div>
+
+	<div id="sidebar">
+		<div class="controls">
+			<a href="#" class="pushpullbutton btn" title="Git Push/Pull"></a>
+			<a href="#" class="commitbutton btn" title="Git Commit"></a>
+			<a href="#" class="savebutton btn" title="Save"></a>
+			<a href="#" class="new btn" title="New"></a>
+			<a href="{{ base_url }}/peeked/logout" class="logout btn" title="Logout"></a>
+		</div>
+		<ul class="nav">
+		{% for page in pages %}
+			<li><a href="#" data-url="{{ page.url }}" class="post"><span data-icon="file-text2" aria-hidden="true"></span>{{ page.url|slice(base_url|length,1000) }}</a>
+			<a href="{{ page.url }}" target="_blank" class="view" title="View"><span data-icon="eye" aria-hidden="true"></span></a>
+			<a href="#" data-url="{{ page.url }}" class="delete" title="Delete"><span data-icon="eye-blocked" aria-hidden="true"></span></a></li>
+		{% endfor %}
+		</ul>
+	</div>
+
+	<div id="main">
+	    <div id="epiceditor"></div>
+
+	    <script src="{{ base_url }}/plugins/peeked/jquery.1.9.1.min.js"></script>
+            <script src="{{ base_url }}/plugins/peeked/top_up-1.7.2/top_up-min.js"></script>
+	    <script src="{{ base_url }}/plugins/peeked/epiceditor/js/epiceditor.min.js"></script>
+	    <script>
+	    $(document).ready(function() {
+
+		//$.getJSON("peeked/files", function(data) {
+		//	for(i=0; i < data.len; i++) {
+		//		$('.nav').append('<li>filemgr ' + data[i].entry + '</li>')
+		//	};
+		//});
+
+	    	var unsaved = false;
+		    var editor = new EpicEditor({
+				container: 'epiceditor',
+				basePath: '{{ base_url }}/plugins/peeked/epiceditor',
+				clientSideStorage: false,
+				useNativeFullscreen: false,
+				file: {
+					name: 'epiceditor',
+					defaultContent: '',
+					autoSave: 5000
+				},
+				theme: {
+					base: '{{ base_url }}/plugins/peeked/epiceditor/themes/base/epiceditor.css',
+					preview: '{{ base_url }}/plugins/peeked/epiceditor/themes/preview/github.css',
+					editor: '{{ base_url }}/plugins/peeked/epiceditor/themes/editor/epic-light.css'
+				},
+				button: {
+					preview: true,
+					fullscreen: false
+				},
+				focusOnLoad: true
+			}).load();
+
+			$.post('peeked/open', { file: "/" }, function(data){
+                                        $('#epiceditor').data('currentFile', "/");
+                                        editor.importFile('epiceditor', data);
+                                        unsaved = false;
+                                        document.title = document.title.replace(' *', '');
+                                });
+
+			$(editor.getElement('editor')).on('keyup', function (){
+				if(!unsaved){
+					unsaved = true;
+					document.title += ' *';
+				}
+			});
+
+			// New
+			$('.controls .new').on('click', function(e){
+				e.preventDefault();
+                                var dir = prompt('Please enter the dir(path without host and page/file name)', '/');
+				var title = prompt('Please enter a post title', '');
+				if(title != null && title != '' && dir != null && dir != ''){
+					$.post('peeked/new', { title: title, dir: dir }, function(data){
+						if(data.error){
+							alert(data.error);
+						} else {
+							$('.nav .post').removeClass('open');
+							$('#epiceditor').data('currentFile', "{{ base_url }}" + data.file);
+							editor.importFile('epiceditor', data.content);
+							unsaved = false;
+							document.title = document.title.replace(' *', '');
+							$('.nav').prepend('<li><a href="#" data-url="{{ base_url }}/'+ data.file +'" class="post open"><span data-icon="&#x926;" aria-hidden="true"></span>'+ data.file +'</a><a href="{{ base_url }}/'+ data.file +'" target="_blank" class="view" title="View">5</a><a href="#" data-url="{{ base_url }}/'+ data.file +'" class="delete" title="Delete">4</a></li>')
+						}
+					}, 'json');
+				}
+			});
+
+			// Open post
+			$('.nav').on('click', '.post', function(e){
+				e.preventDefault();
+				if(unsaved && !confirm('You have unsaved changes. Are you sure you want to leave this post?')) return false;
+				$('.nav .post').removeClass('open');
+				$(this).addClass('open');
+
+				var fileUrl = $(this).attr('data-url');
+				$.post('peeked/open', { file: fileUrl }, function(data){
+					$('#epiceditor').data('currentFile', fileUrl);
+					editor.importFile('epiceditor', data);
+					unsaved = false;
+					document.title = document.title.replace(' *', '');
+				});
+			});
+
+			// Save post
+			editor.on('autosave', function () {
+				$('#saving').text('Saving...').addClass('active');
+				$.post('peeked/save', { file: $('#epiceditor').data('currentFile'), content: editor.exportFile() }, function(data){
+					$('#saving').text('Saved');
+					unsaved = false;
+					document.title = document.title.replace(' *', '');
+					setTimeout(function(){
+						$('#saving').removeClass('active');
+					}, 1000);
+				});
+			});
+
+			// Save on preview
+			editor.on('preview', function () {
+				editor.emit('autosave');
+			});
+
+			// Delete post
+			$('.nav').on('click', '.delete', function(e){
+				e.preventDefault();
+				if(!confirm('Are you sure you want to delete this file?')) return false;
+				$('.nav .post').removeClass('open');
+
+				var li = $(this).parents('li');
+				var fileUrl = $(this).attr('data-url');
+				$.post('peeked/delete', { file: fileUrl }, function(data){
+					li.remove();
+					$('#epiceditor').data('currentFile', '');
+					editor.importFile('epiceditor', '');
+					unsaved = false;
+					document.title = document.title.replace(' *', '');
+				});
+			});
+
+			$('.controls').on('click', '.savebutton', function(e) {
+				$('#saving').text('Saving...').addClass('active');
+                                $.post('peeked/save', { file: $('#epiceditor').data('currentFile'), content: editor.exportFile() }, function(data){
+                                        $('#saving').text('Saved');
+                                        unsaved = false;
+                                        document.title = document.title.replace(' *', '');
+                                        setTimeout(function(){
+                                                $('#saving').removeClass('active');
+                                        }, 1000);
+                                });
+			});
+			$('.controls').on('click', '.commitbutton', function(e) {
+				open_popup();
+				$('.popupcontent').load('peeked/commit');
+			});
+
+			$('.controls').on('click', '.pushpullbutton', function(e) {
+				open_popup();
+                                $('.popupcontent').load('peeked/pushpull');
+                        });
+			$('#popup').on('click', '.closegadget', function(e) {
+				close_popup();
+                        });
+			$('#cover').on('click', function(e) {
+				close_popup();
+			});
+
+			// Window resize
+			$('body,#main,#epiceditor').height($(window).height());
+			$(window).resize(function() {
+				$('body,#main,#epiceditor').height($(window).height());
+				editor.reflow();
+			});
+
+		});
+
+		function open_popup() {
+			$('#cover').show();
+			$('#popup').show();
+			$(document).on('keyup.popup', function(e) {
+				if(e.keyCode == 27) {
+					close_popup();
+				}
+			});
+		}
+		function close_popup() {
+			$('#cover').hide();
+			$('#popup').hide();
+			$('.popupcontent').empty();
+			$(document).unbind('keyup.popup');
+		}
+
+		$.getJSON("peeked/git", function(data) {
+			if(data.have_repo) {
+				$('.commitbutton').show();
+			}
+			if(data.remotes.length) {
+				$('.pushpullbutton').show();
+			}
+                });		
+	    </script>
+	</div>
+</body>
+</html>
