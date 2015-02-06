@@ -7,14 +7,17 @@ Install
 -------
 
 Either:
+
 * Clone the Github repo into your 'plugins' directory (so you get a 'peeked' subdirectory)
+
 Or:
+
 * Extract the zip into your 'plugins' directory
 
 Then:
 
 1. Open the pico_editor_config.php file and insert your sha1 hashed password
-2. Visit http://www.yoursite.com/admin and login
+2. Visit http://www.yoursite.com/peeked and login
 3. Update the permissions if needed.
 4. Thats it :)
 
